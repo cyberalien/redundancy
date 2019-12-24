@@ -1,0 +1,36 @@
+{
+	"name": "@cyberalien/redundancy",
+	"description": "Reusable redundancy library for API queries",
+	"version": "0.0.1",
+	"author": "Vjacheslav Trushkin",
+	"license": "(Apache-2.0 OR GPL-2.0)",
+	"main": "lib/code/redundancy.js",
+	"scripts": {
+		"cleanup": "rm -rf lib",
+		"lint": "eslint src/**/*.ts",
+		"prebuild": "npm run lint && npm run cleanup",
+		"build": "tsc -p .",
+		"prewatch": "npm run lint",
+		"watch": "tsc -p . -w",
+		"test": "mocha lib/tests/*_test.js",
+		"pretest": "npm run build"
+	},
+	"bugs": "https://github.com/cyberalien/redundancy/issues",
+	"homepage": "https://github.com/cyberalien/redundancy",
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/cyberalien/redundancy.git"
+	},
+	"devDependencies": {
+		"@types/chai": "^4.2.7",
+		"@types/mocha": "^5.2.7",
+		"@types/node": "^12.12.14",
+		"@typescript-eslint/eslint-plugin": "^2.11.0",
+		"@typescript-eslint/parser": "^2.11.0",
+		"chai": "^4.2.0",
+		"eslint": "^6.7.2",
+		"mocha": "^6.2.2",
+		"typescript": "^3.7.2"
+	},
+	"dependencies": {}
+}
