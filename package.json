@@ -1,10 +1,11 @@
 {
 	"name": "@cyberalien/redundancy",
 	"description": "Reusable redundancy library for API queries",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"author": "Vjacheslav Trushkin",
 	"license": "(Apache-2.0 OR GPL-2.0)",
 	"main": "lib/code/redundancy.js",
+	"types": "lib/code/types.d.ts",
 	"scripts": {
 		"cleanup": "rm -rf lib",
 		"lint": "eslint src/**/*.ts",

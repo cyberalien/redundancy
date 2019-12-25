@@ -2,24 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { RedundancyConfig, defaultConfig } from './config';
-import {
-	Query,
-	QueryCallback,
-	OptionalDoneCallback,
-	PendingItem,
-} from './query';
-
-/**
- * Export imported interfaces
- */
-export {
-	RedundancyConfig,
-	QueryCallback as RedundancyQueryCallback,
-	OptionalDoneCallback as RedundancyOptionalDoneCallback,
-	PendingItem as RedundancyPendingItem,
-};
-
-export type RedundancyQuery = typeof Query;
+import { Query, QueryCallback, OptionalDoneCallback } from './query';
 
 /**
  * Function to filter item
