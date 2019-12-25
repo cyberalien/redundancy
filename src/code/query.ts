@@ -42,7 +42,7 @@ export type OptionalDoneCallback = DoneCallback | null;
 /**
  * Item in pending items list
  */
-interface PendingItem {
+export interface PendingItem {
 	readonly query: Query;
 	status: ExecStatus;
 	readonly startTime: number;
