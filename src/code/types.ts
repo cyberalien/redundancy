@@ -25,8 +25,7 @@ export type RedundancyQuery = typeof Query;
 /**
  * Interfaces from redundancy.ts
  */
-import { Redundancy as RedundancyClass, FilterCallback } from './redundancy';
+import { Redundancy, FilterCallback } from './redundancy';
 
+export { Redundancy };
 export { FilterCallback as RedundancyFilterCallback };
-
-export type Redundancy = typeof RedundancyClass;
