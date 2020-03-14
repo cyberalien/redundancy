@@ -1,7 +1,7 @@
 {
 	"name": "@cyberalien/redundancy",
 	"description": "Reusable redundancy library for API queries",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"author": "Vjacheslav Trushkin",
 	"license": "(Apache-2.0 OR GPL-2.0)",
 	"main": "lib/code/redundancy.js",
