@@ -26,7 +26,7 @@ export {
 /**
  * Interfaces from redundancy.ts
  */
-import { Redundancy, FilterCallback } from './redundancy';
+import { initRedundancy, Redundancy, FilterCallback } from './redundancy';
 
-export { Redundancy };
+export { initRedundancy, Redundancy };
 export { FilterCallback as RedundancyFilterCallback };

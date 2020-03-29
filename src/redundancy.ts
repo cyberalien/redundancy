@@ -1,6 +1,3 @@
-// Allow <any> type because query and resource can be anything
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { RedundancyConfig, defaultConfig } from './config';
 import {
 	sendQuery,
@@ -17,83 +14,112 @@ export interface FilterCallback {
 }
 
 /**
- * Redundancy class
+ * Redundancy instance
  */
-export class Redundancy {
-	private config: RedundancyConfig;
-	private queries: GetQueryStatus[] = [];
+export interface Redundancy {
+	// Send query
+	query: (
+		payload: unknown,
+		queryCallback: QueryCallback,
+		doneCallback?: OptionalDoneCallback
+	) => GetQueryStatus;
 
-	/**
-	 * Constructor. Accepts partial RedundancyConfig object as parameter, merges with defaults
-	 */
-	constructor(config: object) {
-		if (
-			typeof config !== 'object' ||
-			typeof (config as RedundancyConfig).resources !== 'object' ||
-			!((config as RedundancyConfig).resources instanceof Array) ||
-			!(config as RedundancyConfig).resources.length
-		) {
-			throw new Error('Invalid Reduncancy constructor parameter');
-		}
+	// Find Query instance
+	find: (callback: FilterCallback) => GetQueryStatus | null;
 
-		this.config = Object.assign({}, defaultConfig, config);
-		this.cleanup = this.cleanup.bind(this);
+	// Set resource start index. Used by Query instances to change resource index to last successful resource
+	setIndex: (index: number) => void;
+
+	// Get resource start index. Store it in configuration
+	getIndex: () => number;
+
+	// Remove aborted and completed queries
+	cleanup: () => void;
+}
+
+/**
+ * Set configuration
+ */
+function setConfig(config: Partial<RedundancyConfig>): RedundancyConfig {
+	if (
+		typeof config !== 'object' ||
+		typeof (config as RedundancyConfig).resources !== 'object' ||
+		!((config as RedundancyConfig).resources instanceof Array) ||
+		!(config as RedundancyConfig).resources.length
+	) {
+		throw new Error('Invalid Reduncancy configuration');
 	}
+
+	const newConfig = Object.create(null);
+	let key: keyof RedundancyConfig;
+	for (key in defaultConfig) {
+		if (config[key] !== void 0) {
+			newConfig[key] = config[key];
+		} else {
+			newConfig[key] = defaultConfig[key];
+		}
+	}
+
+	return newConfig;
+}
+
+/**
+ * Redundancy instance
+ */
+export function initRedundancy(cfg: Partial<RedundancyConfig>): Redundancy {
+	// Configuration
+	const config: RedundancyConfig = setConfig(cfg);
+
+	// List of queries
+	let queries: GetQueryStatus[] = [];
 
 	/**
 	 * Send query
 	 */
-	query(
-		payload: any,
+	function query(
+		payload: unknown,
 		queryCallback: QueryCallback,
 		doneCallback: OptionalDoneCallback = null
 	): GetQueryStatus {
 		const query = sendQuery(
-			this,
-			this.config,
+			// eslint-disable-next-line @typescript-eslint/no-use-before-define
+			instance,
+			config,
 			payload,
 			queryCallback,
 			doneCallback
 		);
-		this.queries.push(query);
+		queries.push(query);
 		return query;
 	}
 
 	/**
-	 * Find Query instance
+	 * Find instance
 	 */
-	find(callback: FilterCallback): GetQueryStatus | null {
-		const result = this.queries.find(value => {
+	function find(callback: FilterCallback): GetQueryStatus | null {
+		const result = queries.find(value => {
 			return callback(value);
 		});
 		return result !== void 0 ? result : null;
 	}
 
 	/**
-	 * Change configuration
+	 * Remove aborted and completed queries
 	 */
-	setConfig(config: object): void {
-		Object.assign(this.config, config);
+	function cleanup(): void {
+		queries = queries.filter(item => item().status === 'pending');
 	}
 
-	/**
-	 * Set resource start index. Used by Query instances to change resource index to last successful resource
-	 */
-	setIndex(index: number): void {
-		this.config.index = index;
-	}
+	// Create and return functions
+	const instance: Redundancy = {
+		query,
+		find,
+		setIndex: (index: number) => {
+			config.index = index;
+		},
+		getIndex: () => config.index,
+		cleanup,
+	};
 
-	/**
-	 * Get resource start index. Store it in configuration
-	 */
-	getIndex(): number {
-		return this.config.index;
-	}
-
-	/**
-	 * Remove aborted and completed instances
-	 */
-	cleanup(): void {
-		this.queries = this.queries.filter(item => item().status === 'pending');
-	}
+	return instance;
 }

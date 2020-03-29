@@ -4,7 +4,7 @@
 
 import 'mocha';
 import { expect } from 'chai';
-import { Redundancy } from '../lib/redundancy';
+import { initRedundancy } from '../lib/redundancy';
 
 interface DummyResponses {
 	[index: string]: string;
@@ -12,7 +12,7 @@ interface DummyResponses {
 
 describe('Redundancy tests', () => {
 	it('Simple query', done => {
-		const redundancy = new Redundancy({
+		const redundancy = initRedundancy({
 			resources: [
 				'https://api.local', // Will fail
 				'https://api-backup1.local', // Success
@@ -71,21 +71,16 @@ describe('Redundancy tests', () => {
 		).to.be.equal(query);
 	});
 
-	it('setConfig', done => {
-		const redundancy = new Redundancy({
+	it('Different start index', done => {
+		const redundancy = initRedundancy({
 			resources: [
 				'https://api.local',
 				'https://api-backup1.local',
 				'https://api-backup2.local',
 			],
-			rotate: 3000,
-			timeout: 3000,
-		});
-
-		// Change start index to 1 and rotate to smaller number
-		redundancy.setConfig({
-			index: 1,
 			rotate: 20,
+			timeout: 3000,
+			index: 1,
 		});
 
 		// Premade responses
