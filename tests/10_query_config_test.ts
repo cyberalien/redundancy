@@ -2,8 +2,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import 'mocha';
 import { expect } from 'chai';
-import { RedundancyConfig } from '../code/config';
-import { Query } from '../code/query';
+import { RedundancyConfig } from '../lib/config';
+import { Query } from '../lib/query';
 
 describe('Query configuration tests', () => {
 	it('Timeout as callback', done => {

@@ -4,7 +4,7 @@
 
 import 'mocha';
 import { expect } from 'chai';
-import { Redundancy } from '../code/redundancy';
+import { Redundancy } from '../lib/redundancy';
 
 interface DummyResponses {
 	[index: string]: string;

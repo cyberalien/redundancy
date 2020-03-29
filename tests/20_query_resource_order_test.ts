@@ -2,9 +2,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import 'mocha';
 import { expect } from 'chai';
-import { RedundancyConfig } from '../code/config';
-import { Query } from '../code/query';
-import { Redundancy } from '../code/redundancy';
+import { RedundancyConfig } from '../lib/config';
+import { Query } from '../lib/query';
+import { Redundancy } from '../lib/redundancy';
 
 describe('Query resource order tests', () => {
 	const failTimeout = 500;
