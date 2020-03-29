@@ -3,7 +3,7 @@
 import 'mocha';
 import { expect } from 'chai';
 import { RedundancyConfig } from '../lib/config';
-import { Query } from '../lib/query';
+import { sendQuery } from '../lib/query';
 
 describe('Failing query tests', () => {
 	const failTimeout = 500;
@@ -40,7 +40,7 @@ describe('Failing query tests', () => {
 			limit: 0,
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -51,9 +51,9 @@ describe('Failing query tests', () => {
 				expect(resource).to.be.equal(prefix + 'item 1');
 				expect(payload).to.be.equal('query');
 				expect(status.status).to.be.equal('pending');
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
-				const diff = Date.now() - status.startTime;
+				const diff = Date.now() - status.getStatus().startTime;
 
 				if (status.attempt === 1) {
 					// First attemt
@@ -79,12 +79,12 @@ describe('Failing query tests', () => {
 					status.done('foo');
 
 					// Check if query is completed
-					expect(q1.status).to.be.equal('completed');
+					expect(q1().status).to.be.equal('completed');
 				}
 			},
 			(data, payload, query) => {
 				expect(data).to.be.equal('foo');
-				expect(query.status).to.be.equal('completed');
+				expect(query().status).to.be.equal('completed');
 				done();
 			}
 		);
@@ -123,7 +123,7 @@ describe('Failing query tests', () => {
 			limit: 0,
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -134,9 +134,9 @@ describe('Failing query tests', () => {
 				expect(resource).to.be.equal(prefix + 'item 1');
 				expect(payload).to.be.equal('query');
 				expect(status.status).to.be.equal('pending');
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
-				const diff = Date.now() - status.startTime;
+				const diff = Date.now() - status.getStatus().startTime;
 
 				if (status.attempt === 1) {
 					// First attemt
@@ -163,7 +163,7 @@ describe('Failing query tests', () => {
 						status.done();
 
 						// Check if query is completed
-						expect(q1.status).to.be.equal('completed');
+						expect(q1().status).to.be.equal('completed');
 						done();
 					}, attemptDelay);
 				}
@@ -187,7 +187,7 @@ describe('Failing query tests', () => {
 			limit: 0,
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -231,7 +231,7 @@ describe('Failing query tests', () => {
 			limit: 0,
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -258,7 +258,7 @@ describe('Failing query tests', () => {
 		setTimeout(() => {
 			// Only 2 queries should have been executed
 			expect(queryCounter).to.be.equal(2);
-			q1.abort();
+			q1().abort();
 		}, failTimeout);
 	});
 
@@ -276,7 +276,7 @@ describe('Failing query tests', () => {
 			limit: 2,
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',

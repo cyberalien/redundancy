@@ -2,13 +2,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { RedundancyConfig, defaultConfig } from './config';
-import { Query, QueryCallback, OptionalDoneCallback } from './query';
+import {
+	sendQuery,
+	GetQueryStatus,
+	QueryCallback,
+	OptionalDoneCallback,
+} from './query';
 
 /**
  * Function to filter item
  */
 export interface FilterCallback {
-	(item: Query): boolean;
+	(item: GetQueryStatus): boolean;
 }
 
 /**
@@ -16,7 +21,7 @@ export interface FilterCallback {
  */
 export class Redundancy {
 	private config: RedundancyConfig;
-	private queries: Query[] = [];
+	private queries: GetQueryStatus[] = [];
 
 	/**
 	 * Constructor. Accepts partial RedundancyConfig object as parameter, merges with defaults
@@ -42,8 +47,8 @@ export class Redundancy {
 		payload: any,
 		queryCallback: QueryCallback,
 		doneCallback: OptionalDoneCallback = null
-	): Query {
-		const query = new Query(
+	): GetQueryStatus {
+		const query = sendQuery(
 			this,
 			this.config,
 			payload,
@@ -57,7 +62,7 @@ export class Redundancy {
 	/**
 	 * Find Query instance
 	 */
-	find(callback: FilterCallback): Query | null {
+	find(callback: FilterCallback): GetQueryStatus | null {
 		const result = this.queries.find(value => {
 			return callback(value);
 		});
@@ -89,6 +94,6 @@ export class Redundancy {
 	 * Remove aborted and completed instances
 	 */
 	cleanup(): void {
-		this.queries = this.queries.filter(item => item.status === 'pending');
+		this.queries = this.queries.filter(item => item().status === 'pending');
 	}
 }

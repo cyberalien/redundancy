@@ -8,19 +8,20 @@ export { RedundancyConfig };
  * Interfaces from query.ts
  */
 import {
-	Query,
+	sendQuery,
+	GetQueryStatus,
 	QueryCallback,
 	OptionalDoneCallback,
 	PendingItem,
 } from './query';
 
 export {
+	sendQuery as sendRedundancyQuery,
+	GetQueryStatus as GetRedundancyQueryStatus,
 	QueryCallback as RedundancyQueryCallback,
 	OptionalDoneCallback as RedundancyOptionalDoneCallback,
 	PendingItem as RedundancyPendingItem,
 };
-
-export type RedundancyQuery = typeof Query;
 
 /**
  * Interfaces from redundancy.ts

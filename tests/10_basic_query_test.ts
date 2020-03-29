@@ -3,7 +3,7 @@
 import 'mocha';
 import { expect } from 'chai';
 import { RedundancyConfig } from '../lib/config';
-import { Query } from '../lib/query';
+import { sendQuery } from '../lib/query';
 
 describe('Basic query tests', () => {
 	it('Simple query', done => {
@@ -19,7 +19,7 @@ describe('Basic query tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -33,7 +33,7 @@ describe('Basic query tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
@@ -44,11 +44,11 @@ describe('Basic query tests', () => {
 				status.done();
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 
 				done();
 			},
-			(data, payload, query) => {
+			(data, payload, getStatus) => {
 				done('doneCallback should have never been called without data');
 			}
 		);
@@ -56,7 +56,7 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Query with response', done => {
@@ -75,7 +75,7 @@ describe('Basic query tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -89,7 +89,7 @@ describe('Basic query tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
@@ -100,12 +100,12 @@ describe('Basic query tests', () => {
 				status.done(result);
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 			},
-			(data, payload, query) => {
+			(data, payload, getStatus) => {
 				expect(data).to.be.equal(result);
 				expect(payload).to.be.equal('query');
-				expect(query).to.be.equal(q1);
+				expect(getStatus).to.be.equal(q1);
 
 				done();
 			}
@@ -114,7 +114,7 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Query with multiple response callbacks', done => {
@@ -134,7 +134,7 @@ describe('Basic query tests', () => {
 		let tracker = 0;
 		let callbacksTracker = false;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -148,7 +148,7 @@ describe('Basic query tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
@@ -159,7 +159,7 @@ describe('Basic query tests', () => {
 				status.done(result);
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 			},
 			(data, payload, query) => {
 				done('Default callback should have been overwritten');
@@ -169,17 +169,17 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 
 		// Replace callback
-		q1.doneCallback(data => {
+		q1().subscribe(data => {
 			expect(callbacksTracker).to.be.equal(false);
 			expect(data).to.be.equal(result);
 			callbacksTracker = true;
 		}, true);
 
 		// Add second callback
-		q1.doneCallback((data, payload, query) => {
+		q1().subscribe((data, payload, query) => {
 			expect(callbacksTracker).to.be.equal(true);
 			expect(data).to.be.equal(result);
 			expect(payload).to.be.equal('query');
@@ -206,7 +206,7 @@ describe('Basic query tests', () => {
 		let tracker = 0;
 		let abortCalled = false;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -220,19 +220,19 @@ describe('Basic query tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
-					expect(q1.status).to.be.equal('completed');
+					expect(q1().status).to.be.equal('completed');
 					abortCalled = true;
 				};
 
 				// Mark as complete via query, which means status.abort should be called
-				q1.done(result);
+				q1().done(result);
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 			},
 			(data, payload, query) => {
 				expect(abortCalled).to.be.equal(true);
@@ -247,7 +247,7 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Fail first loop', done => {
@@ -263,12 +263,12 @@ describe('Basic query tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
 			(resource, payload, status) => {
-				const timeDiff = Date.now() - status.startTime;
+				const timeDiff = Date.now() - status.getStatus().startTime;
 				// console.log(resource, timeDiff, status);
 
 				expect(resource).to.be.equal(prefix + 'item 1');
@@ -293,7 +293,7 @@ describe('Basic query tests', () => {
 
 				expect(payload).to.be.equal('query');
 				expect(status.status).to.be.equal('pending');
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				expect(status.abort).to.be.equal(null);
@@ -301,7 +301,7 @@ describe('Basic query tests', () => {
 				// Mark as complete on second attempt
 				switch (tracker - 1) {
 					case 1:
-						expect(q1.status).to.be.equal('pending');
+						expect(q1().status).to.be.equal('pending');
 						status.abort = (): void => {
 							done();
 						};
@@ -312,7 +312,7 @@ describe('Basic query tests', () => {
 							done('Abort should not be called!');
 						};
 						status.done();
-						expect(q1.status).to.be.equal('completed');
+						expect(q1().status).to.be.equal('completed');
 
 					// Call done() in abort() for first item
 					// done();
@@ -323,7 +323,7 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Abort', done => {
@@ -340,7 +340,7 @@ describe('Basic query tests', () => {
 		let tracker = 0;
 		let abortCalled = false;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -351,24 +351,24 @@ describe('Basic query tests', () => {
 				expect(resource).to.be.equal(prefix + 'item 1');
 				expect(payload).to.be.equal('query');
 				expect(status.status).to.be.equal('pending');
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				expect(status.abort).to.be.equal(null);
 				status.abort = (): void => {
 					abortCalled = true;
 					expect(status.status).to.be.equal('aborted');
-					expect(q1.status).to.be.equal('aborted');
+					expect(q1().status).to.be.equal('aborted');
 				};
 
 				// Abort query
-				q1.abort();
+				q1().abort();
 
 				// Done on timer
 				setTimeout((): void => {
 					expect(abortCalled).to.be.equal(true);
 					expect(status.status).to.be.equal('aborted');
-					expect(q1.status).to.be.equal('aborted');
+					expect(q1().status).to.be.equal('aborted');
 					done();
 				}, 50);
 			},
@@ -380,6 +380,6 @@ describe('Basic query tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 });

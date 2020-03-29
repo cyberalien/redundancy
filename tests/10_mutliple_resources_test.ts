@@ -3,7 +3,7 @@
 import 'mocha';
 import { expect } from 'chai';
 import { RedundancyConfig } from '../lib/config';
-import { Query } from '../lib/query';
+import { sendQuery } from '../lib/query';
 
 describe('Multiple resources tests', () => {
 	it('2 resources', done => {
@@ -19,7 +19,7 @@ describe('Multiple resources tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -33,7 +33,7 @@ describe('Multiple resources tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
@@ -44,7 +44,7 @@ describe('Multiple resources tests', () => {
 				status.done();
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 
 				done();
 			}
@@ -53,7 +53,7 @@ describe('Multiple resources tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Start index', done => {
@@ -69,7 +69,7 @@ describe('Multiple resources tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -83,7 +83,7 @@ describe('Multiple resources tests', () => {
 				expect(status.status).to.be.equal('pending');
 				expect(status.attempt).to.be.equal(1);
 
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				status.abort = (): void => {
@@ -94,7 +94,7 @@ describe('Multiple resources tests', () => {
 				status.done();
 
 				// Check if query is completed
-				expect(q1.status).to.be.equal('completed');
+				expect(q1().status).to.be.equal('completed');
 
 				done();
 			}
@@ -103,7 +103,7 @@ describe('Multiple resources tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Fail first resource', done => {
@@ -119,12 +119,12 @@ describe('Multiple resources tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
 			(resource, payload, status) => {
-				const timeDiff = Date.now() - status.startTime;
+				const timeDiff = Date.now() - status.getStatus().startTime;
 				// console.log(resource, timeDiff, status);
 
 				switch (resource) {
@@ -155,7 +155,7 @@ describe('Multiple resources tests', () => {
 
 				expect(payload).to.be.equal('query');
 				expect(status.status).to.be.equal('pending');
-				expect(q1.status).to.be.equal('pending');
+				expect(q1().status).to.be.equal('pending');
 
 				// Set custom "abort" callback to make sure it is not called
 				expect(status.abort).to.be.equal(null);
@@ -163,7 +163,7 @@ describe('Multiple resources tests', () => {
 				// Mark as complete on second attempt
 				switch (resource) {
 					case prefix + 'item 1':
-						expect(q1.status).to.be.equal('pending');
+						expect(q1().status).to.be.equal('pending');
 						break;
 
 					case prefix + 'item 2':
@@ -171,7 +171,7 @@ describe('Multiple resources tests', () => {
 							done('Abort should not be called!');
 						};
 						status.done();
-						expect(q1.status).to.be.equal('completed');
+						expect(q1().status).to.be.equal('completed');
 						done();
 				}
 			}
@@ -180,6 +180,6 @@ describe('Multiple resources tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 });

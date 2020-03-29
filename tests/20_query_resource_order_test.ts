@@ -3,7 +3,7 @@
 import 'mocha';
 import { expect } from 'chai';
 import { RedundancyConfig } from '../lib/config';
-import { Query } from '../lib/query';
+import { sendQuery } from '../lib/query';
 import { Redundancy } from '../lib/redundancy';
 
 describe('Query resource order tests', () => {
@@ -30,12 +30,12 @@ describe('Query resource order tests', () => {
 			},
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			fakeParent as Redundancy,
 			config,
 			'query',
 			(resource, payload, status) => {
-				log.push(resource);
+				log.push(resource as string);
 			}
 		);
 
@@ -75,12 +75,12 @@ describe('Query resource order tests', () => {
 			},
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			fakeParent as Redundancy,
 			config,
 			'query',
 			(resource, payload, status) => {
-				log.push(resource);
+				log.push(resource as string);
 			}
 		);
 
@@ -130,12 +130,12 @@ describe('Query resource order tests', () => {
 			},
 		};
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			fakeParent as Redundancy,
 			config,
 			'query',
 			(resource, payload, status) => {
-				log.push(resource);
+				log.push(resource as string);
 
 				// Complete on attempt 5
 				if (status.attempt === 5) {

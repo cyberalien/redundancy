@@ -3,7 +3,7 @@
 import 'mocha';
 import { expect } from 'chai';
 import { RedundancyConfig } from '../lib/config';
-import { Query } from '../lib/query';
+import { sendQuery } from '../lib/query';
 
 describe('Query configuration tests', () => {
 	it('Timeout as callback', done => {
@@ -34,7 +34,7 @@ describe('Query configuration tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -56,7 +56,7 @@ describe('Query configuration tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Rotate as callback', done => {
@@ -88,7 +88,7 @@ describe('Query configuration tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -110,7 +110,7 @@ describe('Query configuration tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 
 	it('Limit as callback', done => {
@@ -140,7 +140,7 @@ describe('Query configuration tests', () => {
 
 		let tracker = 0;
 
-		const q1 = new Query(
+		const q1 = sendQuery(
 			null,
 			config,
 			'query',
@@ -157,6 +157,6 @@ describe('Query configuration tests', () => {
 		// This should be called first
 		expect(tracker).to.be.equal(0);
 		tracker++;
-		expect(q1.status).to.be.equal('pending');
+		expect(q1().status).to.be.equal('pending');
 	});
 });
