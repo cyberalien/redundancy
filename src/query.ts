@@ -1,26 +1,47 @@
-import { RedundancyConfig } from './config';
-import { Redundancy } from './redundancy';
+import type { RedundancyConfig, RedundancyResource } from './config';
+// import type { Redundancy } from './redundancy';
 
 /**
  * Execution status
  */
-type ExecStatus = 'pending' | 'completed' | 'aborted';
+type QueryItemStatus = 'pending' | 'completed' | 'aborted' | 'failed';
+
+/**
+ * Custom payload
+ */
+type QueryPayload = unknown;
+
+/**
+ * Callback
+ *
+ * If error is present, something went wrong and data is undefined. If error is undefined, data is set.
+ */
+export type QueryDoneCallback = (data?: unknown, error?: unknown) => void;
+
+/**
+ * Callback for "abort" pending item.
+ */
+export type QueryAbortCallback = () => void;
+
+/**
+ * Callback to call to update last successful resource index. Used by Resundancy class to automatically update config.
+ */
+export type QueryUpdateIndexCallback = (index: number) => void;
 
 /**
  * Status for query
  */
 export interface QueryStatus {
-	done: (data: unknown) => void; // Function to call to complete query
-	abort: () => void; // Function to call to abort everything
-	subscribe: (callback: OptionalDoneCallback, overwrite?: boolean) => void; // Add function to call when query is complete. Can be used to abort execution of query implementation
-	payload: unknown; // Payload
-	startTime: number; // Start time
-	loop: number; // Current loop number (increased once per full loop of available resources)
-	attempt: number; // Current attempt number (increased on every query)
-	startIndex: number; // Resource start index
-	index: number; // Last index
-	maxIndex: number; // Max index (config.resources.length - 1)
-	status: ExecStatus; // Query status (global, not specific to one query)
+	readonly abort: () => void; // Function to call to abort everything
+	readonly subscribe: (
+		callback?: QueryDoneCallback,
+		overwrite?: boolean
+	) => void; // Add function to call when query is complete
+	readonly payload: QueryPayload; // Payload
+	status: QueryItemStatus; // Query status (global, not specific to one query)
+	startTime: number; // Time when function was called
+	queriesSent: number; // Number of queries sent
+	queriesPending: number; // Number of pending queries
 }
 
 /**
@@ -29,100 +50,121 @@ export interface QueryStatus {
 export type GetQueryStatus = () => QueryStatus;
 
 /**
- * Callback for "done" pending item.
+ * Item in pending items list
  */
-export interface QueryDoneCallback {
-	(data?: unknown): void;
-}
-
-/**
- * Callback for "abort" pending item.
- */
-export interface QueryAbortCallback {
-	(): void;
+export interface PendingQueryItem {
+	readonly getQueryStatus: GetQueryStatus;
+	status: QueryItemStatus; // Current query status
+	readonly resource: RedundancyResource; // Resource
+	readonly done: QueryDoneCallback; // Function to call with data
+	abort?: QueryAbortCallback; // Function to call to abort query, set by query handler
 }
 
 /**
  * Function to send to item to send query
  */
-export interface QueryCallback {
-	(resource: unknown, payload: unknown, status: PendingItem): void;
-}
-
-/**
- * Function to send to item on completion
- */
-export interface DoneCallback {
-	(data: unknown, payload: unknown, getStatus: GetQueryStatus): void;
-}
-
-export type OptionalDoneCallback = DoneCallback | null;
-
-/**
- * Item in pending items list
- */
-export interface PendingItem {
-	readonly getStatus: GetQueryStatus;
-	status: ExecStatus; // Current query status
-	readonly attempt: number; // Starts with 1 for first attempt
-	readonly done: QueryDoneCallback; // Function to call with data
-	abort: QueryAbortCallback | null; // Function to call to abort query, set by query handler
-}
+export type QueryModuleCallback = (
+	resource: RedundancyResource,
+	payload: QueryPayload,
+	queryItem: PendingQueryItem
+) => void;
 
 /**
  * Send query
  */
 export function sendQuery(
-	parent: Redundancy | null,
 	config: RedundancyConfig,
 	payload: unknown,
-	queryCallback: QueryCallback,
-	doneCallback: OptionalDoneCallback = null
+	query: QueryModuleCallback,
+	done?: QueryDoneCallback,
+	success?: QueryUpdateIndexCallback
 ): GetQueryStatus {
-	// Optional callbacks to call when query is complete
-	let doneCallbacks: DoneCallback[] = [];
-	if (typeof doneCallback === 'function') {
-		doneCallbacks.push(doneCallback);
+	// Get number of resources
+	const resourcesCount = config.resources.length;
+
+	// Save start index
+	const startIndex = config.random
+		? Math.floor(Math.random() * resourcesCount)
+		: config.index;
+
+	// Get resources
+	let resources: RedundancyResource[];
+	if (config.random) {
+		// Randomise array
+		let list = config.resources.slice(0);
+		resources = [];
+		while (list.length > 1) {
+			const nextIndex = Math.floor(Math.random() * list.length);
+			resources.push(list[nextIndex]);
+			list = list.slice(0, nextIndex).concat(list.slice(nextIndex + 1));
+		}
+		resources = resources.concat(list);
+	} else {
+		// Rearrange resources to start with startIndex
+		resources = config.resources
+			.slice(startIndex)
+			.concat(config.resources.slice(0, startIndex));
 	}
 
-	// Start time
+	// Counters, status
 	const startTime = Date.now();
-
-	// Current loop number (increased once per full loop of available resources)
-	let loop = 0;
-
-	// Current attempt number (increased on every query)
-	let attempt = 0;
-
-	// Max index (config.resources.length - 1)
-	const maxIndex = config.resources.length - 1;
-
-	// Resource start index
-	let startIndex = config.index ? config.index : 0;
-	if (config.random && config.resources.length > 1) {
-		startIndex = Math.floor(Math.random() * config.resources.length);
-	}
-	startIndex = Math.min(startIndex, maxIndex);
-
-	// Last index
-	let index = startIndex;
-
-	// List of pending items
-	let pending: PendingItem[] = [];
-
-	// Query status
-	let status: ExecStatus = 'pending';
+	let status: QueryItemStatus = 'pending';
+	let queriesSent = 0;
+	let lastError: unknown = void 0;
 
 	// Timer
-	let timer = 0;
+	let timer: ReturnType<typeof setTimeout> | null = null;
+
+	// Execution queue
+	let queue: PendingQueryItem[] = [];
+
+	// Callbacks to call when query is complete
+	let doneCallbacks: QueryDoneCallback[] = [];
+	if (typeof done === 'function') {
+		doneCallbacks.push(done);
+	}
+
+	/**
+	 * Reset timer
+	 */
+	function resetTimer(): void {
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
+	}
+
+	/**
+	 * Abort everything
+	 */
+	function abort(): void {
+		// Change status
+		if (status === 'pending') {
+			status = 'aborted';
+		}
+
+		// Reset timer
+		resetTimer();
+
+		// Abort all queued items
+		queue.forEach((item) => {
+			if (item.abort) {
+				item.abort();
+			}
+			if (item.status === 'pending') {
+				item.status = 'aborted';
+			}
+		});
+		queue = [];
+	}
 
 	/**
 	 * Add / replace callback to call when execution is complete.
 	 * This can be used to abort pending query implementations when query is complete or aborted.
 	 */
 	function subscribe(
-		callback: OptionalDoneCallback,
-		overwrite = false
+		callback?: QueryDoneCallback,
+		overwrite?: boolean
 	): void {
 		if (overwrite) {
 			doneCallbacks = [];
@@ -135,264 +177,186 @@ export function sendQuery(
 	/**
 	 * Get query status
 	 */
-	function getStatus(): QueryStatus {
+	function getQueryStatus(): QueryStatus {
 		return {
-			// eslint-disable-next-line @typescript-eslint/no-use-before-define
-			done,
-			// eslint-disable-next-line @typescript-eslint/no-use-before-define
-			abort,
-			subscribe,
-			payload,
 			startTime,
-			loop,
-			attempt,
-			startIndex,
-			index,
-			maxIndex,
+			payload,
 			status,
+			queriesSent,
+			queriesPending: queue.length,
+			subscribe,
+			abort,
 		};
 	}
 
 	/**
-	 * Stop timer
+	 * Fail query
 	 */
-	function stopTimer(): void {
-		if (timer) {
-			clearTimeout(timer);
-		}
-		timer = 0;
-	}
+	function failQuery(): void {
+		status = 'failed';
 
-	/**
-	 * Abort pending item
-	 */
-	function abortPendingItem(item: PendingItem): void {
-		if (item.abort && item.status === 'pending') {
-			item.status = 'aborted';
-			item.abort();
-		}
-	}
-
-	/**
-	 * Stop everything
-	 */
-	function stopQuery(): void {
-		stopTimer();
-
-		// Stop all pending queries that have abort() callback
-		pending.forEach(abortPendingItem);
-		pending = [];
-
-		// Cleanup parent
-		if (parent !== null) {
-			parent.cleanup();
-		}
-	}
-
-	/**
-	 * Send retrieved data to doneCallbacks
-	 */
-	function sendRetrievedData(data: unknown): void {
-		doneCallbacks.forEach(callback => {
-			callback(data, payload, getStatus);
+		// Send notice to all callbacks
+		doneCallbacks.forEach((callback) => {
+			callback(void 0, lastError);
 		});
 	}
 
 	/**
-	 * Complete stuff
+	 * Clear queue
 	 */
-	function done(data: unknown = void 0): void {
-		// Stop timer
-		stopTimer();
-
-		// Complete query
-		if (status === 'pending') {
-			status = 'completed';
-			stopQuery();
-			if (data !== void 0) {
-				sendRetrievedData(data);
+	function clearQueue(): void {
+		queue = queue.filter((item) => {
+			if (item.status === 'pending') {
+				item.status = 'aborted';
 			}
-		}
+			if (item.abort) {
+				item.abort();
+			}
+			return false;
+		});
 	}
 
 	/**
-	 * Check if next run is new loop
-	 *
-	 * Returns true on new loop or next index number
+	 * Got response from module
 	 */
-	function isNewLoop(): boolean | number {
-		if (maxIndex < 1) {
-			return true;
-		}
-
-		let nextIndex = index + 1;
-		if (nextIndex > maxIndex) {
-			nextIndex = 0;
-		}
-		if (nextIndex === startIndex) {
-			return true;
-		}
-		return nextIndex;
-	}
-
-	/**
-	 * Done, called by pendingItem
-	 */
-	function completePendingItem(
-		pendingItem: PendingItem,
-		index: number,
-		data: unknown = void 0
+	function moduleResponse(
+		item: PendingQueryItem,
+		data?: unknown,
+		error?: unknown
 	): void {
-		if (pendingItem.status === 'pending') {
-			pendingItem.status = 'completed';
+		const isError = data === void 0;
 
-			// Complete query
-			done(data);
+		// Remove item from queue
+		queue = queue.filter((queued) => queued !== item);
 
-			// Change parent index
-			if (parent !== null && !config.random && index !== startIndex) {
-				// Tell Redundancy instance to change start index
-				parent.setIndex(index);
+		// Check status
+		switch (status) {
+			case 'pending':
+				// Pending
+				break;
+
+			case 'failed':
+				if (isError || !config.dataAfterTimeout) {
+					// Query has already timed out or dataAfterTimeout is disabled
+					return;
+				}
+				// Success after failure
+				break;
+
+			default:
+				// Aborted or completed
+				return;
+		}
+
+		// Error
+		if (isError) {
+			if (error !== void 0) {
+				lastError = error;
+			}
+			if (!queue.length) {
+				if (!resources.length) {
+					// Nothing else queued, nothing can be queued
+					failQuery();
+				} else {
+					// Queue is empty: run next item immediately
+					// eslint-disable-next-line @typescript-eslint/no-use-before-define
+					execNext();
+				}
+			}
+			return;
+		}
+
+		// Reset timers, abort pending queries
+		resetTimer();
+		clearQueue();
+
+		// Update index in Redundancy
+		if (success && !config.random) {
+			const index = config.resources.indexOf(item.resource);
+			if (index !== -1 && index !== config.index) {
+				success(index);
 			}
 		}
+
+		// Mark as completed and call callbacks
+		status = 'completed';
+		doneCallbacks.forEach((callback) => {
+			callback(data);
+		});
 	}
 
 	/**
-	 * Send query
+	 * Execute next query
 	 */
-	function sendQuery(): void {
-		const queryIndex = index;
-		const queryResource = config.resources[queryIndex];
-		const pendingItem: PendingItem = {
-			getStatus,
-			attempt: attempt + 1,
+	function execNext(): void {
+		// Check status
+		if (status !== 'pending') {
+			return;
+		}
+
+		// Reset timer
+		resetTimer();
+
+		// Get resource
+		const resource = resources.shift();
+		if (resource === void 0) {
+			// Nothing to execute: wait for final timeout before failing
+			if (queue.length) {
+				const timeout: number =
+					typeof config.timeout === 'function'
+						? config.timeout(startTime)
+						: config.timeout;
+				if (timeout) {
+					// Last timeout before failing to allow late response
+					timer = setTimeout(() => {
+						resetTimer();
+						if (status === 'pending') {
+							// Clear queue
+							clearQueue();
+							failQuery();
+						}
+					}, timeout);
+					return;
+				}
+			}
+
+			// Fail
+			failQuery();
+			return;
+		}
+
+		// Create new item
+		const item: PendingQueryItem = {
+			getQueryStatus,
 			status: 'pending',
-			done: (data: unknown = void 0) => {
-				completePendingItem(pendingItem, queryIndex, data);
+			resource,
+			done: (data?: unknown, error?: unknown) => {
+				moduleResponse(item, data, error);
 			},
-			abort: null,
 		};
 
-		// Clean up old pending queries
-		if (pending.length > Math.max(maxIndex * 2, 5)) {
-			// Array is not empty, so first shift() will always return item
-			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			abortPendingItem(pending.shift()!);
-		}
+		// Add to queue
+		queue.push(item);
 
-		// Add pending query and call callback
-		pending.push(pendingItem);
-		queryCallback(queryResource, payload, pendingItem);
+		// Bump next index
+		queriesSent++;
+
+		// Get timeout for next item
+		const timeout: number =
+			typeof config.rotate === 'function'
+				? config.rotate(queriesSent, startTime)
+				: config.rotate;
+
+		// Create timer
+		timer = setTimeout(execNext, timeout);
+
+		// Execute it
+		query(resource, payload, item);
 	}
 
-	/**
-	 * Start timer for next query
-	 */
-	function startTimer(): void {
-		if (status !== 'pending') {
-			return;
-		}
+	// Execute first query on next tick
+	setTimeout(execNext);
 
-		const nextIndex = isNewLoop();
-		let timeout;
-		if (typeof nextIndex === 'boolean') {
-			// New loop
-			const nextLoop = loop + 1;
-
-			// Check limit
-			let limit: number;
-			if (typeof config.limit === 'function') {
-				limit = config.limit(nextLoop, startTime);
-			} else {
-				limit = config.limit;
-			}
-
-			if (limit > 0 && limit <= nextLoop) {
-				// Attempts limit was hit
-				stopTimer();
-				return;
-			}
-
-			if (typeof config.timeout === 'function') {
-				timeout = config.timeout(nextLoop, startIndex, startTime);
-			} else {
-				timeout = config.timeout;
-			}
-		} else {
-			// Next index
-			if (typeof config.rotate === 'function') {
-				const queriesSent =
-					nextIndex < startIndex
-						? maxIndex - startIndex + nextIndex
-						: nextIndex - startIndex;
-
-				timeout = config.rotate(
-					queriesSent,
-					loop,
-					nextIndex,
-					startTime
-				);
-			} else {
-				timeout = config.rotate;
-			}
-		}
-
-		if (typeof timeout !== 'number' || timeout < 1) {
-			// Stop sending queries
-			stopTimer();
-			return;
-		}
-
-		// eslint-disable-next-line @typescript-eslint/no-use-before-define
-		timer = (setTimeout(nextTimer, timeout) as unknown) as number;
-	}
-
-	/**
-	 * Next attempt
-	 */
-	function next(): void {
-		if (status !== 'pending') {
-			return;
-		}
-
-		// Send query
-		sendQuery();
-
-		// Start timer on next tick
-		setTimeout(startTimer);
-	}
-
-	/**
-	 * Next attempt on timer
-	 */
-	function nextTimer(): void {
-		// Increase index
-		index = isNewLoop() as number;
-		if (typeof index === 'boolean') {
-			loop++;
-			index = startIndex;
-		}
-		attempt++;
-
-		// Start next attempt
-		next();
-	}
-
-	/**
-	 * Abort all queries
-	 */
-	function abort(): void {
-		if (status !== 'pending') {
-			return;
-		}
-
-		status = 'aborted';
-		stopQuery();
-	}
-
-	// Run next attempt on next tick
-	setTimeout(next);
-
-	// Return function that can check status
-	return getStatus;
+	// Return getQueryStatus()
+	return getQueryStatus;
 }

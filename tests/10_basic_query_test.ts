@@ -2,384 +2,290 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import 'mocha';
 import { expect } from 'chai';
-import { RedundancyConfig } from '../lib/config';
+import type { RedundancyConfig } from '../lib/config';
 import { sendQuery } from '../lib/query';
 
-describe('Basic query tests', () => {
-	it('Simple query', done => {
-		const prefix = 'simple test ';
+describe('Basic queries', () => {
+	it('Empty query', (done) => {
+		const payload = {};
 		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
+			resources: [],
 			index: 0,
-			timeout: 100,
+			timeout: 200,
 			rotate: 100,
 			random: false,
-			limit: 0,
+			dataAfterTimeout: false,
 		};
 
-		let tracker = 0;
+		// Tracking
+		let isSync = true;
+		const startTime = Date.now();
 
-		const q1 = sendQuery(
-			null,
+		// Send query
+		const getStatus = sendQuery(
 			config,
-			'query',
-			(resource, payload, status) => {
-				// This should be called asynchronously
-				expect(tracker).to.be.equal(1);
-				tracker++;
+			payload,
+			(resource, queryPayload, queryItem) => {
+				done('Query should not be called when resources list is empty');
+			},
+			(data, error) => {
+				expect(isSync).to.be.equal(false);
+				expect(data).to.be.equal(void 0);
+				expect(error).to.be.equal(void 0);
 
-				expect(resource).to.be.equal(prefix + 'item 1');
-				expect(payload).to.be.equal('query');
-				expect(status.status).to.be.equal('pending');
-				expect(status.attempt).to.be.equal(1);
+				// Check status
+				const status = getStatus();
+				expect(status.status).to.be.equal('failed');
+				expect(status.queriesSent).to.be.equal(0);
+				expect(status.queriesPending).to.be.equal(0);
 
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				status.abort = (): void => {
-					done('Abort should not be called!');
-				};
-
-				// Mark as complete
-				status.done();
-
-				// Check if query is completed
-				expect(q1().status).to.be.equal('completed');
+				// Should be almost instant: no items in queue
+				const diff = Date.now() - startTime;
+				expect(diff < 50).to.be.equal(
+					true,
+					`Time difference: ${diff}, should have been almost instant`
+				);
 
 				done();
-			},
-			(data, payload, getStatus) => {
-				done('doneCallback should have never been called without data');
 			}
 		);
 
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
+		// Check status
+		const status = getStatus();
+		expect(status.status).to.be.equal('pending');
+		expect(status.queriesSent).to.be.equal(0);
+		expect(status.queriesPending).to.be.equal(0);
+
+		isSync = false;
 	});
 
-	it('Query with response', done => {
-		const prefix = 'response test ';
+	it('Simple query', (done) => {
+		const payload = {};
+		const resources = [{}];
+		const result = {};
 		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
+			resources,
 			index: 0,
-			timeout: 100,
+			timeout: 200,
 			rotate: 100,
 			random: false,
-			limit: 0,
-		};
-		const result = {
-			foo: 1,
+			dataAfterTimeout: false,
 		};
 
-		let tracker = 0;
+		// Tracking
+		let isSync = true;
+		const startTime = Date.now();
+		let sentQuery = false;
 
-		const q1 = sendQuery(
-			null,
+		// Send query
+		const getStatus = sendQuery(
 			config,
-			'query',
-			(resource, payload, status) => {
-				// This should be called asynchronously
-				expect(tracker).to.be.equal(1);
-				tracker++;
+			payload,
+			(resource, queryPayload, queryItem) => {
+				expect(isSync).to.be.equal(false);
+				expect(resource).to.be.equal(resources[0]);
+				expect(queryPayload).to.be.equal(payload);
 
-				expect(resource).to.be.equal(prefix + 'item 1');
-				expect(payload).to.be.equal('query');
+				// Make sure query was executed only once
+				expect(sentQuery).to.be.equal(false);
+				sentQuery = true;
+
+				// Check status
+				expect(queryItem.getQueryStatus).to.be.equal(getStatus);
+				const status = getStatus();
 				expect(status.status).to.be.equal('pending');
-				expect(status.attempt).to.be.equal(1);
+				expect(status.payload).to.be.equal(payload);
+				expect(status.queriesSent).to.be.equal(1);
+				expect(status.queriesPending).to.be.equal(1);
 
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				status.abort = (): void => {
-					done('Abort should not be called!');
+				// Add abort function
+				queryItem.abort = (): void => {
+					done('Abort should have not been called');
 				};
 
-				// Mark as complete
-				status.done(result);
-
-				// Check if query is completed
-				expect(q1().status).to.be.equal('completed');
+				// Complete
+				queryItem.done(result);
 			},
-			(data, payload, getStatus) => {
+			(data, error) => {
+				// Make sure query was sent
+				expect(sentQuery).to.be.equal(true);
+
+				// Validate data
 				expect(data).to.be.equal(result);
-				expect(payload).to.be.equal('query');
-				expect(getStatus).to.be.equal(q1);
+				expect(error).to.be.equal(void 0);
+
+				// Check status
+				const status = getStatus();
+				expect(status.status).to.be.equal('completed');
+				expect(status.queriesSent).to.be.equal(1);
+				expect(status.queriesPending).to.be.equal(0);
+
+				// Should be almost instant
+				const diff = Date.now() - startTime;
+				expect(diff < 50).to.be.equal(
+					true,
+					`Time difference: ${diff}, should have been almost instant`
+				);
 
 				done();
 			}
 		);
 
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
+		// Check status
+		const status = getStatus();
+		expect(status.status).to.be.equal('pending');
+		expect(status.queriesSent).to.be.equal(0);
+		expect(status.queriesPending).to.be.equal(0);
+
+		isSync = false;
 	});
 
-	it('Query with multiple response callbacks', done => {
-		const prefix = 'response callbacks test ';
+	it('Failing query', (done) => {
+		const payload = {};
+		const resources = [{}];
+		const result = {};
 		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
+			resources,
 			index: 0,
-			timeout: 100,
+			timeout: 200,
 			rotate: 100,
 			random: false,
-			limit: 0,
-		};
-		const result = {
-			foo: 1,
+			dataAfterTimeout: false,
 		};
 
-		let tracker = 0;
-		let callbacksTracker = false;
+		// Tracking
+		let isSync = true;
+		const startTime = Date.now();
+		let sentQuery = false;
 
-		const q1 = sendQuery(
-			null,
+		// Send query
+		const getStatus = sendQuery(
 			config,
-			'query',
-			(resource, payload, status) => {
-				// This should be called asynchronously
-				expect(tracker).to.be.equal(1);
-				tracker++;
+			payload,
+			(resource, queryPayload, queryItem) => {
+				expect(isSync).to.be.equal(false);
+				expect(resource).to.be.equal(resources[0]);
+				expect(queryPayload).to.be.equal(payload);
 
-				expect(resource).to.be.equal(prefix + 'item 1');
-				expect(payload).to.be.equal('query');
-				expect(status.status).to.be.equal('pending');
-				expect(status.attempt).to.be.equal(1);
+				// Make sure query was executed only once
+				expect(sentQuery).to.be.equal(false);
+				sentQuery = true;
 
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				status.abort = (): void => {
-					done('Abort should not be called!');
+				// Add abort function
+				queryItem.abort = (): void => {
+					done('Abort should have not been called');
 				};
 
-				// Mark as complete
-				status.done(result);
-
-				// Check if query is completed
-				expect(q1().status).to.be.equal('completed');
+				// Fail
+				queryItem.done(void 0, result);
 			},
-			(data, payload, query) => {
-				done('Default callback should have been overwritten');
-			}
-		);
+			(data, error) => {
+				// Make sure query was sent
+				expect(sentQuery).to.be.equal(true);
 
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
+				// Validate data
+				expect(data).to.be.equal(void 0);
+				expect(error).to.be.equal(result);
 
-		// Replace callback
-		q1().subscribe(data => {
-			expect(callbacksTracker).to.be.equal(false);
-			expect(data).to.be.equal(result);
-			callbacksTracker = true;
-		}, true);
+				// Check status
+				const status = getStatus();
+				expect(status.status).to.be.equal('failed');
+				expect(status.queriesSent).to.be.equal(1);
+				expect(status.queriesPending).to.be.equal(0);
 
-		// Add second callback
-		q1().subscribe((data, payload, query) => {
-			expect(callbacksTracker).to.be.equal(true);
-			expect(data).to.be.equal(result);
-			expect(payload).to.be.equal('query');
-			expect(query).to.be.equal(q1);
-
-			done();
-		});
-	});
-
-	it('Complete query from Query instance', done => {
-		const prefix = 'complete query ';
-		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
-			index: 0,
-			timeout: 100,
-			rotate: 100,
-			random: false,
-			limit: 0,
-		};
-		const result = {
-			foo: 1,
-		};
-
-		let tracker = 0;
-		let abortCalled = false;
-
-		const q1 = sendQuery(
-			null,
-			config,
-			'query',
-			(resource, payload, status) => {
-				// This should be called asynchronously
-				expect(tracker).to.be.equal(1);
-				tracker++;
-
-				expect(resource).to.be.equal(prefix + 'item 1');
-				expect(payload).to.be.equal('query');
-				expect(status.status).to.be.equal('pending');
-				expect(status.attempt).to.be.equal(1);
-
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				status.abort = (): void => {
-					expect(q1().status).to.be.equal('completed');
-					abortCalled = true;
-				};
-
-				// Mark as complete via query, which means status.abort should be called
-				q1().done(result);
-
-				// Check if query is completed
-				expect(q1().status).to.be.equal('completed');
-			},
-			(data, payload, query) => {
-				expect(abortCalled).to.be.equal(true);
-				expect(data).to.be.equal(result);
-				expect(payload).to.be.equal('query');
-				expect(query).to.be.equal(q1);
+				// Should be almost instant
+				const diff = Date.now() - startTime;
+				expect(diff < 40).to.be.equal(
+					true,
+					`Time difference: ${diff}, should have been almost instant`
+				);
 
 				done();
 			}
 		);
 
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
+		// Check status
+		const status = getStatus();
+		expect(status.status).to.be.equal('pending');
+		expect(status.queriesSent).to.be.equal(0);
+		expect(status.queriesPending).to.be.equal(0);
+
+		isSync = false;
 	});
 
-	it('Fail first loop', done => {
-		const prefix = 'fail loop ';
+	it('Timed out query (~300ms)', (done) => {
+		const payload = {};
+		const resources = [{}];
 		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
+			resources,
 			index: 0,
-			timeout: 50,
-			rotate: 1000,
+			timeout: 200,
+			rotate: 100,
 			random: false,
-			limit: 0,
+			dataAfterTimeout: false,
 		};
 
-		let tracker = 0;
+		// Tracking
+		let isSync = true;
+		const startTime = Date.now();
+		let sentQuery = false;
+		let itemAborted = false;
 
-		const q1 = sendQuery(
-			null,
+		// Send query
+		const getStatus = sendQuery(
 			config,
-			'query',
-			(resource, payload, status) => {
-				const timeDiff = Date.now() - status.getStatus().startTime;
-				// console.log(resource, timeDiff, status);
+			payload,
+			(resource, queryPayload, queryItem) => {
+				expect(isSync).to.be.equal(false);
+				expect(resource).to.be.equal(resources[0]);
+				expect(queryPayload).to.be.equal(payload);
 
-				expect(resource).to.be.equal(prefix + 'item 1');
+				// Make sure query was executed only once
+				expect(sentQuery).to.be.equal(false);
+				sentQuery = true;
 
-				switch (tracker) {
-					case 1:
-						expect(status.attempt).to.be.equal(1);
-
-						// ~0ms
-						expect(timeDiff).to.be.below(25);
-						break;
-
-					case 2:
-						expect(status.attempt).to.be.equal(2);
-
-						// ~50ms
-						expect(timeDiff).to.be.above(25);
-						expect(timeDiff).to.be.below(75);
-						break;
-				}
-				tracker++;
-
-				expect(payload).to.be.equal('query');
-				expect(status.status).to.be.equal('pending');
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				expect(status.abort).to.be.equal(null);
-
-				// Mark as complete on second attempt
-				switch (tracker - 1) {
-					case 1:
-						expect(q1().status).to.be.equal('pending');
-						status.abort = (): void => {
-							done();
-						};
-						break;
-
-					case 2:
-						status.abort = (): void => {
-							done('Abort should not be called!');
-						};
-						status.done();
-						expect(q1().status).to.be.equal('completed');
-
-					// Call done() in abort() for first item
-					// done();
-				}
-			}
-		);
-
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
-	});
-
-	it('Abort', done => {
-		const prefix = 'abort ';
-		const config: RedundancyConfig = {
-			resources: [prefix + 'item 1'],
-			index: 0,
-			timeout: 1,
-			rotate: 1,
-			random: false,
-			limit: 0,
-		};
-
-		let tracker = 0;
-		let abortCalled = false;
-
-		const q1 = sendQuery(
-			null,
-			config,
-			'query',
-			(resource, payload, status) => {
-				expect(status.attempt).to.be.equal(1);
-				tracker++;
-
-				expect(resource).to.be.equal(prefix + 'item 1');
-				expect(payload).to.be.equal('query');
-				expect(status.status).to.be.equal('pending');
-				expect(q1().status).to.be.equal('pending');
-
-				// Set custom "abort" callback to make sure it is not called
-				expect(status.abort).to.be.equal(null);
-				status.abort = (): void => {
-					abortCalled = true;
-					expect(status.status).to.be.equal('aborted');
-					expect(q1().status).to.be.equal('aborted');
+				// Add abort function
+				queryItem.abort = (): void => {
+					expect(itemAborted).to.be.equal(false);
+					itemAborted = true;
 				};
 
-				// Abort query
-				q1().abort();
-
-				// Done on timer
-				setTimeout((): void => {
-					expect(abortCalled).to.be.equal(true);
-					expect(status.status).to.be.equal('aborted');
-					expect(q1().status).to.be.equal('aborted');
-					done();
-				}, 50);
+				// Do not do anything
 			},
-			(data, payload, query) => {
-				done('doneCallback should have never been called on abort');
+			(data, error) => {
+				// Make sure query was sent
+				expect(sentQuery).to.be.equal(true);
+
+				// Validate data
+				expect(data).to.be.equal(void 0);
+				expect(error).to.be.equal(void 0);
+
+				// Check status
+				const status = getStatus();
+				expect(status.status).to.be.equal('failed');
+				expect(status.queriesSent).to.be.equal(1);
+				expect(status.queriesPending).to.be.equal(0);
+
+				// Item should have been aborted
+				expect(itemAborted).to.be.equal(true);
+
+				// Should have been config.rotate + config.timeout
+				const diff = Date.now() - startTime;
+				expect(diff > 250).to.be.equal(
+					true,
+					`Time difference: ${diff}, should have been >= 300ms`
+				);
+
+				done();
 			}
 		);
 
-		// This should be called first
-		expect(tracker).to.be.equal(0);
-		tracker++;
-		expect(q1().status).to.be.equal('pending');
+		// Check status
+		const status = getStatus();
+		expect(status.status).to.be.equal('pending');
+		expect(status.queriesSent).to.be.equal(0);
+		expect(status.queriesPending).to.be.equal(0);
+
+		isSync = false;
 	});
 });

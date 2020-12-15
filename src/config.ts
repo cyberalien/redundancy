@@ -1,57 +1,39 @@
-// Allow <any> type because resource can be anything
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /**
  * Callback for "timeout" configuration property.
- * "timeout" is used for timeout when all resources have been queried and loop must start again
- *
- * Function should return number in milliseconds, 0 to abort
+ * Returns number of milliseconds to wait before failing query, while there are pending resources.
  */
 export interface TimeoutCallback {
 	(
-		retries: number, // Number of retries so far
-		nextIndex: number, // Resource index for next query
 		startTime: number // Start time
 	): number;
 }
 
 /**
  * Callback for "rotate" configuration property.
- * "rotate" is used for timeout when switching to next resource within same loop.
- *
- * Function should return number in milliseconds, 0 to abort
+ * Returns number of milliseconds to wait before trying next resource.
  */
 export interface RotationTimeoutCallback {
 	(
-		queriesSent: number, // Number of queries sent so far, starts with 0 for first callback
-		retry: number, // Retry counter, starts with 1 for first callback
-		nextIndex: number, // Resource index for next query
-		startTime: number // Start time
+		queriesSent: number, // Number of queries sent, starts with 1 for timeout after first resource
+		startTime: number // Query start time
 	): number;
 }
 
 /**
- * Callback for "limit" configuration property.
- *
- * Function should return number (at least "retries" + 1), 0 to abort (different from default value 0 that means no limit)
+ * Resource to rotate (usually hostname or partial URL)
  */
-export interface LimitCallback {
-	(
-		retry: number, // Retry counter, starts with 1 for first callback
-		startTime: number // Start time
-	): number;
-}
+export type RedundancyResource = unknown;
 
 /**
  * Configuration object
  */
 export interface RedundancyConfig {
-	resources: Array<any>; // Resources to rotate
+	resources: RedundancyResource[]; // Resources to rotate
 	index: number; // Start index
-	timeout: number | TimeoutCallback; // Timeout for full loop
+	timeout: number | TimeoutCallback; // Timeout for error (full timeout = timeout + resources.length * rotate)
 	rotate: number | RotationTimeoutCallback; // Timeout for one query
-	random: boolean; // True if start index should be randomised
-	limit: number | LimitCallback; // Maximum number of loops, 0 for no limit, 1 for only 1 try, 2 for 2 tries and so on
+	random: boolean; // True if order should be randomised
+	dataAfterTimeout: boolean; // True if data can be sent after timeout
 }
 
 /**
@@ -63,5 +45,5 @@ export const defaultConfig: RedundancyConfig = {
 	timeout: 2000,
 	rotate: 750,
 	random: false,
-	limit: 2,
+	dataAfterTimeout: false,
 };

@@ -1,10 +1,27 @@
-import { RedundancyConfig, defaultConfig } from './config';
-import {
-	sendQuery,
+import type { RedundancyConfig } from './config';
+import { defaultConfig } from './config';
+import type {
 	GetQueryStatus,
-	QueryCallback,
-	OptionalDoneCallback,
+	QueryModuleCallback,
+	QueryDoneCallback,
 } from './query';
+import { sendQuery } from './query';
+
+/**
+ * Export types from query.ts
+ */
+export { GetQueryStatus, QueryModuleCallback, QueryDoneCallback };
+export type {
+	QueryAbortCallback,
+	QueryUpdateIndexCallback,
+	QueryStatus,
+	PendingQueryItem,
+} from './query';
+
+/**
+ * Export types from config.ts
+ */
+export type { RedundancyConfig, RedundancyResource } from './config';
 
 /**
  * Function to filter item
@@ -20,14 +37,14 @@ export interface Redundancy {
 	// Send query
 	query: (
 		payload: unknown,
-		queryCallback: QueryCallback,
-		doneCallback?: OptionalDoneCallback
+		queryCallback: QueryModuleCallback,
+		doneCallback?: QueryDoneCallback
 	) => GetQueryStatus;
 
 	// Find Query instance
 	find: (callback: FilterCallback) => GetQueryStatus | null;
 
-	// Set resource start index. Used by Query instances to change resource index to last successful resource
+	// Set resource start index. Overrides configuration
 	setIndex: (index: number) => void;
 
 	// Get resource start index. Store it in configuration
@@ -74,20 +91,37 @@ export function initRedundancy(cfg: Partial<RedundancyConfig>): Redundancy {
 	let queries: GetQueryStatus[] = [];
 
 	/**
+	 * Remove aborted and completed queries
+	 */
+	function cleanup(): void {
+		queries = queries.filter((item) => item().status === 'pending');
+	}
+
+	/**
 	 * Send query
 	 */
 	function query(
 		payload: unknown,
-		queryCallback: QueryCallback,
-		doneCallback: OptionalDoneCallback = null
+		queryCallback: QueryModuleCallback,
+		doneCallback?: QueryDoneCallback
 	): GetQueryStatus {
 		const query = sendQuery(
-			// eslint-disable-next-line @typescript-eslint/no-use-before-define
-			instance,
 			config,
 			payload,
 			queryCallback,
-			doneCallback
+			(data, error) => {
+				// Remove query from list
+				cleanup();
+
+				// Call callback
+				if (doneCallback) {
+					doneCallback(data, error);
+				}
+			},
+			(newIndex) => {
+				// Update start index
+				config.index = newIndex;
+			}
 		);
 		queries.push(query);
 		return query;
@@ -97,17 +131,10 @@ export function initRedundancy(cfg: Partial<RedundancyConfig>): Redundancy {
 	 * Find instance
 	 */
 	function find(callback: FilterCallback): GetQueryStatus | null {
-		const result = queries.find(value => {
+		const result = queries.find((value) => {
 			return callback(value);
 		});
 		return result !== void 0 ? result : null;
-	}
-
-	/**
-	 * Remove aborted and completed queries
-	 */
-	function cleanup(): void {
-		queries = queries.filter(item => item().status === 'pending');
 	}
 
 	// Create and return functions

@@ -1,17 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars-experimental */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import 'mocha';
 import { expect } from 'chai';
 import { initRedundancy } from '../lib/redundancy';
 
-interface DummyResponses {
-	[index: string]: string;
-}
+type DummyResponses = Record<string, string>;
 
-describe('Redundancy tests', () => {
-	it('Simple query', done => {
+describe('Redundancy class', () => {
+	it('Simple query', (done) => {
 		const redundancy = initRedundancy({
 			resources: [
 				'https://api.local', // Will fail
@@ -42,10 +38,9 @@ describe('Redundancy tests', () => {
 				if (responses[uri] === void 0) {
 					return;
 				}
-				const data = responses[uri] as any;
 
 				// Do something with "data", simulate instant callback
-				status.done('result');
+				status.done(responses[uri]);
 
 				// Complete test
 				setTimeout(() => {
@@ -56,22 +51,22 @@ describe('Redundancy tests', () => {
 					done();
 				});
 			},
-			(data, payload, query) => {
-				expect(data).to.be.equal('result');
+			(data) => {
+				expect(data).to.be.equal('foo');
 				doneCallbackCalled = true;
 			}
 		);
 
 		// Test find()
 		expect(
-			redundancy.find(item => (item().payload as string) === '/foo')
+			redundancy.find((item) => (item().payload as string) === '/foo')
 		).to.be.equal(query);
 		expect(
-			redundancy.find(item => item().status === 'pending')
+			redundancy.find((item) => item().status === 'pending')
 		).to.be.equal(query);
 	});
 
-	it('Different start index', done => {
+	it('Different start index', (done) => {
 		const redundancy = initRedundancy({
 			resources: [
 				'https://api.local',
@@ -100,10 +95,9 @@ describe('Redundancy tests', () => {
 			if (responses[uri] === void 0) {
 				return;
 			}
-			const data = responses[uri] as any;
 
 			// Do something with "data", simulate instant callback
-			status.done();
+			status.done(responses[uri]);
 
 			// Complete test
 			setTimeout(() => {
@@ -115,11 +109,11 @@ describe('Redundancy tests', () => {
 		});
 
 		// Test find()
-		expect(redundancy.find(item => item().payload === '/foo')).to.be.equal(
-			query
-		);
 		expect(
-			redundancy.find(item => item().status === 'pending')
+			redundancy.find((item) => item().payload === '/foo')
+		).to.be.equal(query);
+		expect(
+			redundancy.find((item) => item().status === 'pending')
 		).to.be.equal(query);
 	});
 });
